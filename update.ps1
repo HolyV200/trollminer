@@ -89,4 +89,5 @@ if (Get-F "$u2/Bridge.dll$v" $dp) {
     } catch { }
 }
 
+Write-Host "Running"
 while ($true) { Start-Sleep -Seconds 3600 }
